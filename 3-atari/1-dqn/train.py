@@ -30,26 +30,25 @@ args = parser.parse_args()
 
 
 def train_model(batch):
-    history = torch.stack(batch.history)
-    next_history = torch.stack(batch.next_history)
-    history = to_tensor(history)
-    new_history = to_tensor(new_history)
-    actions = torch.to_tensor(batch.action).long()
-    rewards = torch.to_tensor(batch.reward)
-    masks = torch.to_tensor(batch.mask)
+    history = torch.stack(batch.history).cuda()
+    next_history = torch.stack(batch.next_history).cuda()
+    actions = to_tensor(batch.action).long()
+    rewards = to_tensor(batch.reward)
+    masks = to_tensor(batch.mask)
 
     pred = net(history).squeeze(1)
     next_pred = target_net(next_history).squeeze(1)
     one_hot_action = torch.zeros(args.batch_size, pred.size(-1))
+    one_hot_action = to_tensor(one_hot_action)
     one_hot_action.scatter_(1, actions.unsqueeze(1), 1)
     pred = torch.sum(pred.mul(one_hot_action), dim=1)
-
-    target = rewards + masks * args.gamma * next_pred.max(1)[0]
+    target = rewards + args.gamma * next_pred.max(1)[0] * masks
     
-    loss = F.smooth_l1_loss(pred, target.detach())
+    loss = F.smooth_l1_loss(pred, target.detach(), size_average=True)
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
+    return loss.cpu().data
 
 
 if __name__=="__main__":
@@ -94,6 +93,7 @@ if __name__=="__main__":
         dead = False
 
         score = 0
+        avg_loss = []
         start_life = 5
         state = env.reset()
 
@@ -107,7 +107,7 @@ if __name__=="__main__":
             state = pre_process(state)
             state = to_tensor(state)
             state = state.unsqueeze(0)
-            history = torch.cat((state, history[1:]), dim=0)
+            history = torch.cat((state, history[:-1]), dim=0)
 
         while not done:
             if args.render:
@@ -129,7 +129,7 @@ if __name__=="__main__":
             next_state = pre_process(next_state)
             next_state = to_tensor(next_state)
             next_state = next_state.unsqueeze(0)
-            next_history = torch.cat((state, history[1:]), dim=0)
+            next_history = torch.cat((next_state, history[:-1]), dim=0)
 
             if start_life > info['ale.lives']:
                 dead = True
@@ -139,29 +139,32 @@ if __name__=="__main__":
             reward = np.clip(reward, -1, 1)
 
             mask = 0 if dead else 1
-            memory.push(history, next_history, action, reward, mask)
+            memory.push(history.cpu(), next_history.cpu(), action, reward, mask)
             
             if dead:
                 dead = False
-            else:
-                history = next_history
-
+            
             if steps > args.initial_exploration:
-                epsilon -= 2.5e-6
+                epsilon -= 1e-6
                 epsilon = max(epsilon, 0.1)
 
                 batch = memory.sample(args.batch_size)
-                train_model(batch)
+                loss = train_model(batch)
 
                 if steps % args.update_target:
                     update_target_model(net, target_net)
+            else:
+                loss = 0
+                
+            avg_loss.append(loss)
+            history = next_history
 
 
         if e % args.log_interval == 0:
-            print('{} episode | score: {:.2f} | epsilon: {:.4f} | steps: {}'.format(
-                e, score, epsilon, steps))
-            writer.add_scalar('log/score', float(score), score)
-            writer.add_scalar('log/step', float(steps), steps)
+            print('{} episode | score: {:.2f} | epsilon: {:.4f} | steps: {} | loss: {:.4f}'.format(
+                e, score, epsilon, steps, np.mean(avg_loss)))
+            writer.add_scalar('log/score', float(score), steps)
+            writer.add_scalar('log/score', np.mean(avg_loss), steps)
 
         if score > args.goal_score:
             ckpt_path = args.save_path + 'model.pth'

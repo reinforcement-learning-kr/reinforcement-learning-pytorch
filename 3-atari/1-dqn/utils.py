@@ -17,7 +17,7 @@ def get_action(epsilon, qvalue, num_actions):
         return random.randrange(num_actions)
     else:
         _, action = torch.max(qvalue, 1)
-        return action.numpy()[0]
+        return action.cpu().numpy()[0]
 
 
 def update_target_model(net, target_net):
