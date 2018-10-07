@@ -14,7 +14,7 @@ from memory import Memory
 from tensorboardX import SummaryWriter
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--env_name', type=str, default="Breakout-v4", help='')
+parser.add_argument('--env_name', type=str, default="BreakoutDeterministic-v4", help='')
 parser.add_argument('--load_model', type=str, default=None)
 parser.add_argument('--save_path', default='./save_model/', help='')
 parser.add_argument('--render', default=False, action="store_true")
@@ -23,7 +23,7 @@ parser.add_argument('--batch_size', default=32, help='')
 parser.add_argument('--initial_exploration', default=50000, help='')
 parser.add_argument('--update_target', default=10000, help='')
 parser.add_argument('--log_interval', default=1, help='')
-parser.add_argument('--goal_score', default=400, help='')
+parser.add_argument('--goal_score', default=300, help='')
 parser.add_argument('--logdir', type=str, default='./logs',
                     help='tensorboardx logs directory')
 args = parser.parse_args()
@@ -32,9 +32,11 @@ args = parser.parse_args()
 def train_model(batch):
     history = torch.stack(batch.history)
     next_history = torch.stack(batch.next_history)
-    actions = torch.Tensor(batch.action).long()
-    rewards = torch.Tensor(batch.reward)
-    masks = torch.Tensor(batch.mask)
+    history = to_tensor(history)
+    new_history = to_tensor(new_history)
+    actions = torch.to_tensor(batch.action).long()
+    rewards = torch.to_tensor(batch.reward)
+    masks = torch.to_tensor(batch.mask)
 
     pred = net(history).squeeze(1)
     next_pred = target_net(next_history).squeeze(1)
@@ -44,7 +46,7 @@ def train_model(batch):
 
     target = rewards + masks * args.gamma * next_pred.max(1)[0]
     
-    loss = F.mse_loss(pred, target.detach())
+    loss = F.smooth_l1_loss(pred, target.detach())
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
@@ -70,7 +72,11 @@ if __name__=="__main__":
     target_net = Model(num_actions)
     update_target_model(net, target_net)
 
-    optimizer = optim.Adam(net.parameters(), lr=0.001)
+    if torch.cuda.is_available():
+        net.cuda()
+        target_net.cuda()
+
+    optimizer = optim.RMSprop(net.parameters(), lr=0.00025, eps=0.01)
     writer = SummaryWriter('logs')
 
     if not os.path.isdir(args.save_path):
@@ -78,7 +84,7 @@ if __name__=="__main__":
     
     net.train()
     target_net.train()
-    memory = Memory(400000)
+    memory = Memory(100000)
     running_score = 0
     epsilon = 1.0
     steps = 0
@@ -92,14 +98,14 @@ if __name__=="__main__":
         state = env.reset()
 
         state = pre_process(state)
-        state = torch.Tensor(state)
+        state = to_tensor(state)
         history = torch.stack((state, state, state, state))
 
         for i in range(3):
             action = env.action_space.sample()
             state, reward, done, info = env.step(action)
             state = pre_process(state)
-            state = torch.Tensor(state)
+            state = to_tensor(state)
             state = state.unsqueeze(0)
             history = torch.cat((state, history[1:]), dim=0)
 
@@ -121,7 +127,7 @@ if __name__=="__main__":
             next_state, reward, done, info = env.step(real_action)
             
             next_state = pre_process(next_state)
-            next_state = torch.Tensor(next_state)
+            next_state = to_tensor(next_state)
             next_state = next_state.unsqueeze(0)
             next_history = torch.cat((state, history[1:]), dim=0)
 
@@ -141,7 +147,7 @@ if __name__=="__main__":
                 history = next_history
 
             if steps > args.initial_exploration:
-                epsilon -= 1e-6
+                epsilon -= 2.5e-6
                 epsilon = max(epsilon, 0.1)
 
                 batch = memory.sample(args.batch_size)
