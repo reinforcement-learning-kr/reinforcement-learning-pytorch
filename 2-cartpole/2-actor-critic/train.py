@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
-from model import Model
+from model import ActorCritic
 from tensorboardX import SummaryWriter
 
 parser = argparse.ArgumentParser()
@@ -21,14 +21,10 @@ parser.add_argument('--log_interval', default=10, help='')
 parser.add_argument('--logdir', type=str, default='./logs',
                     help='tensorboardx logs directory')
 args = parser.parse_args()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
-def train_model(sample, policy, value):
-    state = sample[0]
-    action = sample[1]
-    reward = sample[2]
-    next_state = sample[3]
-    mask = sample[4]
+def train_model(net, optimizer, transition, policy, value):
+    state, next_state, action, reward, mask = transition
 
     _, next_value = net(next_state)
     pred = reward + mask * args.gamma * next_value[0]
@@ -45,13 +41,13 @@ def train_model(sample, policy, value):
     optimizer.step()
 
 
-def get_action(policy):
+def get_action(policy, num_actions):
     policy = policy.data.numpy()[0]
     action = np.random.choice(num_actions, 1, p=policy)[0]
     return action
 
 
-if __name__=="__main__":
+def main():
     env = gym.make(args.env_name)
     env.seed(500)
     torch.manual_seed(500)
@@ -61,13 +57,14 @@ if __name__=="__main__":
     print('state size:', num_inputs)
     print('action size:', num_actions)
 
-    net = Model(num_inputs, num_actions)
+    net = ActorCritic(num_inputs, num_actions)
     optimizer = optim.Adam(net.parameters(), lr=0.001)
     writer = SummaryWriter('logs')
 
     if not os.path.isdir(args.save_path):
         os.makedirs(args.save_path)
     
+    net.to(device)
     net.train()
     running_score = 0
 
@@ -76,7 +73,7 @@ if __name__=="__main__":
         score = 0
 
         state = env.reset()
-        state = torch.Tensor(state)
+        state = torch.Tensor(state).to(device)
         state = state.unsqueeze(0)
 
         while not done:
@@ -84,16 +81,16 @@ if __name__=="__main__":
                 env.render()
 
             policy, value = net(state)
-            action = get_action(policy)
+            action = get_action(policy, num_actions)
 
             next_state, reward, done, _ = env.step(action)
-            next_state = torch.Tensor(next_state)
+            next_state = torch.Tensor(next_state).to(device)
             next_state = next_state.unsqueeze(0)
             
             mask = 0 if done else 1
             reward = reward if not done or score == 499 else -1
-            sample = [state, action, reward, next_state, mask]
-            train_model(sample, policy, value)
+            transition = [state, next_state, action, reward, mask]
+            train_model(net, optimizer, transition, policy, value)
 
             score += reward
             state = next_state
@@ -109,3 +106,8 @@ if __name__=="__main__":
             torch.save(net.state_dict(), ckpt_path)
             print('running score exceeds 400 so end')
             break
+
+
+if __name__=="__main__":
+    main()
+    
