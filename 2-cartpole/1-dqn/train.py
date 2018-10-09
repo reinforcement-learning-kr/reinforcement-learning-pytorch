@@ -82,6 +82,8 @@ def main():
     if not os.path.isdir(args.save_path):
         os.makedirs(args.save_path)
     
+    net.to(device)
+    target_net.to(device)
     net.train()
     target_net.train()
     memory = Memory(10000)
@@ -106,7 +108,7 @@ def main():
             action = get_action(epsilon, qvalue, num_actions)
             next_state, reward, done, _ = env.step(action)
             
-            next_state = torch.Tensor(next_state).to(device)
+            next_state = torch.Tensor(next_state)
             next_state = next_state.unsqueeze(0)
             
             mask = 0 if done else 1
