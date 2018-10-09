@@ -31,9 +31,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def train_model(net, target_net, optimizer, batch, batch_size):
     states = torch.stack(batch.state).to(device)
     next_states = torch.stack(batch.next_state).to(device)
-    actions = torch.Tensor(batch.action).long()
-    rewards = torch.Tensor(batch.reward)
-    masks = torch.Tensor(batch.mask)
+    actions = torch.Tensor(batch.action).long().to(device)
+    rewards = torch.Tensor(batch.reward).to(device)
+    masks = torch.Tensor(batch.mask).to(device)
 
     pred = net(states).squeeze(1)
     next_pred = target_net(next_states).squeeze(1)
@@ -94,7 +94,7 @@ def main():
         
         score = 0
         state = env.reset()
-        state = torch.Tensor(state)
+        state = torch.Tensor(state).to(device)
         state = state.unsqueeze(0)
 
         while not done:
@@ -106,7 +106,7 @@ def main():
             action = get_action(epsilon, qvalue, num_actions)
             next_state, reward, done, _ = env.step(action)
             
-            next_state = torch.Tensor(next_state)
+            next_state = torch.Tensor(next_state).to(device)
             next_state = next_state.unsqueeze(0)
             
             mask = 0 if done else 1
