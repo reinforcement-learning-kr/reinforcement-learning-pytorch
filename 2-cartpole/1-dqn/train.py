@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
-from model import Model
+from model import QNet
 from memory import Memory
 from tensorboardX import SummaryWriter
 
@@ -26,11 +26,11 @@ parser.add_argument('--goal_score', default=400, help='')
 parser.add_argument('--logdir', type=str, default='./logs',
                     help='tensorboardx logs directory')
 args = parser.parse_args()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
-def train_model(batch, batch_size):
-    states = torch.stack(batch.state)
-    next_states = torch.stack(batch.next_state)
+def train_model(net, target_net, optimizer, batch, batch_size):
+    states = torch.stack(batch.state).to(device)
+    next_states = torch.stack(batch.next_state).to(device)
     actions = torch.Tensor(batch.action).long()
     rewards = torch.Tensor(batch.reward)
     masks = torch.Tensor(batch.mask)
@@ -50,7 +50,7 @@ def train_model(batch, batch_size):
     optimizer.step()
 
 
-def get_action(epsilon, qvalue):
+def get_action(epsilon, qvalue, num_actions):
     if np.random.rand() <= epsilon:
         return random.randrange(num_actions)
     else:
@@ -62,8 +62,7 @@ def update_target_model(net, target_net):
     target_net.load_state_dict(net.state_dict())
 
 
-
-if __name__=="__main__":
+def main():
     env = gym.make(args.env_name)
     env.seed(500)
     torch.manual_seed(500)
@@ -73,14 +72,8 @@ if __name__=="__main__":
     print('state size:', num_inputs)
     print('action size:', num_actions)
 
-    net = Model(num_inputs, num_actions)
-    def weights_init(m):
-        classname = m.__class__.__name__
-        if classname.find('Linear') != -1:
-            torch.nn.init.xavier_uniform(m.weight)
-
-    net.apply(weights_init)
-    target_net = Model(num_inputs, num_actions)
+    net = QNet(num_inputs, num_actions)
+    target_net = QNet(num_inputs, num_actions)
     update_target_model(net, target_net)
 
     optimizer = optim.Adam(net.parameters(), lr=0.001)
@@ -110,7 +103,7 @@ if __name__=="__main__":
 
             steps += 1
             qvalue = net(state)
-            action = get_action(epsilon, qvalue)
+            action = get_action(epsilon, qvalue, num_actions)
             next_state, reward, done, _ = env.step(action)
             
             next_state = torch.Tensor(next_state)
@@ -128,7 +121,7 @@ if __name__=="__main__":
                 epsilon = max(epsilon, 0.1)
 
                 batch = memory.sample(args.batch_size)
-                train_model(batch, args.batch_size)
+                train_model(net, target_net, optimizer, batch, args.batch_size)
 
                 if steps % args.update_target:
                     update_target_model(net, target_net)
@@ -144,4 +137,9 @@ if __name__=="__main__":
             ckpt_path = args.save_path + 'model.pth'
             torch.save(net.state_dict(), ckpt_path)
             print('running score exceeds 400 so end')
-            break
+            break   
+
+
+if __name__=="__main__":
+    main()
+ 
