@@ -8,8 +8,9 @@ import numpy as np
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
-from utils import *
-from model import Model
+
+from utils import pre_process, get_action, update_target_model
+from model import QNet
 from memory import Memory
 from tensorboardX import SummaryWriter
 
@@ -20,26 +21,27 @@ parser.add_argument('--save_path', default='./save_model/', help='')
 parser.add_argument('--render', default=False, action="store_true")
 parser.add_argument('--gamma', default=0.99, help='')
 parser.add_argument('--batch_size', default=32, help='')
-parser.add_argument('--initial_exploration', default=50000, help='')
+parser.add_argument('--initial_exploration', default=1000, help='')
 parser.add_argument('--update_target', default=10000, help='')
 parser.add_argument('--log_interval', default=1, help='')
 parser.add_argument('--goal_score', default=300, help='')
 parser.add_argument('--logdir', type=str, default='./logs',
                     help='tensorboardx logs directory')
 args = parser.parse_args()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def train_model(batch):
-    history = torch.stack(batch.history).cuda()
-    next_history = torch.stack(batch.next_history).cuda()
-    actions = to_tensor(batch.action).long()
-    rewards = to_tensor(batch.reward)
-    masks = to_tensor(batch.mask)
+def train_model(net, target_net, optimizer, batch):
+    history = torch.stack(batch.history).to(device)
+    next_history = torch.stack(batch.next_history).to(device)
+    actions = torch.Tensor(batch.action).long().to(device)
+    rewards = torch.Tensor(batch.reward).to(device)
+    masks = torch.Tensor(batch.mask).to(device)
 
     pred = net(history).squeeze(1)
     next_pred = target_net(next_history).squeeze(1)
     one_hot_action = torch.zeros(args.batch_size, pred.size(-1))
-    one_hot_action = to_tensor(one_hot_action)
+    one_hot_action = one_hot_action.to(device)
     one_hot_action.scatter_(1, actions.unsqueeze(1), 1)
     pred = torch.sum(pred.mul(one_hot_action), dim=1)
     target = rewards + args.gamma * next_pred.max(1)[0] * masks
@@ -51,7 +53,7 @@ def train_model(batch):
     return loss.cpu().data
 
 
-if __name__=="__main__":
+def main():
     env = gym.make(args.env_name)
     env.seed(500)
     torch.manual_seed(500)
@@ -61,19 +63,9 @@ if __name__=="__main__":
     print('image size:', img_shape)
     print('action size:', num_actions)
 
-    net = Model(num_actions)
-    def weights_init(m):
-        classname = m.__class__.__name__
-        if classname.find('Linear') != -1:
-            torch.nn.init.xavier_uniform(m.weight)
-
-    net.apply(weights_init)
-    target_net = Model(num_actions)
+    net = QNet(num_actions)
+    target_net = QNet(num_actions)
     update_target_model(net, target_net)
-
-    if torch.cuda.is_available():
-        net.cuda()
-        target_net.cuda()
 
     optimizer = optim.RMSprop(net.parameters(), lr=0.00025, eps=0.01)
     writer = SummaryWriter('logs')
@@ -81,6 +73,8 @@ if __name__=="__main__":
     if not os.path.isdir(args.save_path):
         os.makedirs(args.save_path)
     
+    net.to(device)
+    target_net.to(device)
     net.train()
     target_net.train()
     memory = Memory(100000)
@@ -98,14 +92,14 @@ if __name__=="__main__":
         state = env.reset()
 
         state = pre_process(state)
-        state = to_tensor(state)
+        state = torch.Tensor(state).to(device)
         history = torch.stack((state, state, state, state))
 
         for i in range(3):
             action = env.action_space.sample()
             state, reward, done, info = env.step(action)
             state = pre_process(state)
-            state = to_tensor(state)
+            state = torch.Tensor(state).to(device)
             state = state.unsqueeze(0)
             history = torch.cat((state, history[:-1]), dim=0)
 
@@ -116,18 +110,11 @@ if __name__=="__main__":
             steps += 1
             qvalue = net(history.unsqueeze(0))
             action = get_action(epsilon, qvalue, num_actions)
-            
-            if action == 0:
-                real_action = 1
-            elif action == 1:
-                real_action = 2
-            else:
-                real_action = 3
 
-            next_state, reward, done, info = env.step(real_action)
+            next_state, reward, done, info = env.step(action + 1)
             
             next_state = pre_process(next_state)
-            next_state = to_tensor(next_state)
+            next_state = torch.Tensor(next_state).to(device)
             next_state = next_state.unsqueeze(0)
             next_history = torch.cat((next_state, history[:-1]), dim=0)
 
@@ -149,7 +136,7 @@ if __name__=="__main__":
                 epsilon = max(epsilon, 0.1)
 
                 batch = memory.sample(args.batch_size)
-                loss = train_model(batch)
+                loss = train_model(net, target_net, optimizer, batch)
 
                 if steps % args.update_target:
                     update_target_model(net, target_net)
@@ -171,3 +158,6 @@ if __name__=="__main__":
             torch.save(net.state_dict(), ckpt_path)
             print('running score exceeds 400 so end')
             break
+
+if __name__=="__main__":
+    main()
