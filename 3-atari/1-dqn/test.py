@@ -5,57 +5,74 @@ import argparse
 import numpy as np
 
 import torch
-from model import Model
+from utils import pre_process, get_action
+from model import QNet
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--env_name', type=str, default="CartPole-v1", help='')
+parser.add_argument('--env_name', type=str, default="BreakoutDeterministic-v4", help='')
 parser.add_argument('--load_model', type=str, default=None)
 parser.add_argument('--save_path', default='./save_model/', help='')
 args = parser.parse_args()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def get_action(qvalue):
-    _, action = torch.max(qvalue, 1)
-    return action.numpy()[0]
-
-
-if __name__=="__main__":
+def main():
     env = gym.make(args.env_name)
     env.seed(500)
     torch.manual_seed(500)
 
-    num_inputs = env.observation_space.shape[0]
-    num_actions = env.action_space.n
-    print('state size:', num_inputs)
+    img_shape = env.observation_space.shape
+    num_actions = 3
+    print('image size:', img_shape)
     print('action size:', num_actions)
 
-    net = Model(num_inputs, num_actions)
+    net = QNet(num_actions)
     net.load_state_dict(torch.load(args.save_path + 'model.pth'))
     
+    net.to(device)
     net.eval()
-    running_score = 0
-    steps = 0
-    
+
+    epsilon = 0
+
     for e in range(5):
         done = False
-        
+
         score = 0
         state = env.reset()
-        state = torch.Tensor(state)
-        state = state.unsqueeze(0)
+
+        state = pre_process(state)
+        state = torch.Tensor(state).to(device)
+        history = torch.stack((state, state, state, state))
+
+        for i in range(3):
+            action = env.action_space.sample()
+            state, reward, done, info = env.step(action)
+            state = pre_process(state)
+            state = torch.Tensor(state).to(device)
+            state = state.unsqueeze(0)
+            history = torch.cat((state, history[:-1]), dim=0)
 
         while not done:
-            env.render()
+            if args.render:
+                env.render()
 
             steps += 1
-            qvalue = net(state)
-            action = get_action(qvalue)
-            next_state, reward, done, _ = env.step(action)
-            
-            next_state = torch.Tensor(next_state)
-            next_state = next_state.unsqueeze(0)
+            qvalue = net(history.unsqueeze(0))
+            action = get_action(0, qvalue, num_actions)
 
+            next_state, reward, done, info = env.step(action + 1)
+            
+            next_state = pre_process(next_state)
+            next_state = torch.Tensor(next_state).to(device)
+            next_state = next_state.unsqueeze(0)
+            next_history = torch.cat((next_state, history[:-1]), dim=0)
+            
             score += reward
-            state = next_state
+            history = next_history
 
         print('{} episode | score: {:.2f}'.format(e, score))
+
+
+if __name__=="__main__":
+    main()
+   
