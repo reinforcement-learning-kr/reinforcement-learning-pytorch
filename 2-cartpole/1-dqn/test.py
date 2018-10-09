@@ -20,7 +20,7 @@ def get_action(qvalue):
     return action.numpy()[0]
 
 
-if __name__=="__main__":
+def main():
     env = gym.make(args.env_name)
     env.seed(500)
     torch.manual_seed(500)
@@ -61,3 +61,8 @@ if __name__=="__main__":
             state = next_state
 
         print('{} episode | score: {:.2f}'.format(e, score))
+        
+
+if __name__=="__main__":
+    main()
+   

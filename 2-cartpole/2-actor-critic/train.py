@@ -23,6 +23,7 @@ parser.add_argument('--logdir', type=str, default='./logs',
 args = parser.parse_args()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+
 def train_model(net, optimizer, transition, policy, value):
     state, next_state, action, reward, mask = transition
 
