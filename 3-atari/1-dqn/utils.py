@@ -22,10 +22,3 @@ def get_action(epsilon, qvalue, num_actions):
 
 def update_target_model(net, target_net):
     target_net.load_state_dict(net.state_dict())
-
-
-def to_tensor(array):
-    tensor = torch.Tensor(array)
-    if torch.cuda.is_available():
-        tensor = tensor.cuda()
-    return tensor
