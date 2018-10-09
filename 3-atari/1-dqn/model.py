@@ -3,10 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-class Model(nn.Module):
+class QNet(nn.Module):
     def __init__(self, num_outputs):
         self.num_outputs = num_outputs
-        super(Model, self).__init__()
+        super(QNet, self).__init__()
         self.conv1 = nn.Conv2d(in_channels=4,
                                out_channels=32,
                                kernel_size=8,
@@ -24,6 +24,13 @@ class Model(nn.Module):
 
         self.fc1 = nn.Linear(7*7*64, 512)
         self.fc2 = nn.Linear(512, num_outputs)
+
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform(m.weight)
+            elif isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', 
+                                        nonlinearity='relu')
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
