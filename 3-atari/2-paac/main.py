@@ -1,5 +1,4 @@
 import os
-import sys
 import gym
 import argparse
 import numpy as np
@@ -8,7 +7,7 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 from tensorboardX import SummaryWriter
-from torch.multiprocessing import Pipe, Process
+from torch.multiprocessing import Pipe
 
 from model import ActorCritic
 from utils import get_action
@@ -24,8 +23,8 @@ parser.add_argument('--render', default=False, action="store_true")
 parser.add_argument('--gamma', default=0.99, help='')
 parser.add_argument('--goal_score', default=400, help='')
 parser.add_argument('--log_interval', default=10, help='')
-parser.add_argument('--save_interval', default=10000, help='')
-parser.add_argument('--num_envs', default=4, help='')
+parser.add_argument('--save_interval', default=1000, help='')
+parser.add_argument('--num_envs', default=8, help='')
 parser.add_argument('--num_step', default=5, help='')
 parser.add_argument('--value_coef', default=0.5, help='')
 parser.add_argument('--entropy_coef', default=0.01, help='')
@@ -35,6 +34,7 @@ parser.add_argument('--clip_grad_norm', default=0.5, help='')
 parser.add_argument('--logdir', type=str, default='./logs',
                     help='tensorboardx logs directory')
 args = parser.parse_args()
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -59,7 +59,8 @@ def main():
     parent_conns = []
     child_conns = []
     
-    # make running environments for workers and make pipe lines for connection
+    # make running environments for workers and 
+    # pipelines for connection between agent and environment
     for i in range(args.num_envs):
         parent_conn, child_conn = Pipe()
         worker = EnvWorker(args.env_name, args.render, child_conn)
@@ -73,15 +74,18 @@ def main():
     
     global_steps = 0
     score = 0
+    count = 0
+    
+    histories = torch.zeros([args.num_envs, 4, 84, 84]).to(device)
 
     while True:
+        count += 1
         memory = Memory(capacity=args.num_step)
         global_steps += (args.num_envs * args.num_step)
-        histories = torch.zeros([args.num_envs, 4, 84, 84]).to(device)
-        
+    
         # gather samples from environment
         for i in range(args.num_step):
-            policies, values = net(histories)
+            policies, values = net(histories.to(device))
             actions = get_action(policies, num_actions)
 
             # send action to each worker environement and get state information
@@ -95,6 +99,7 @@ def main():
 
             score += rewards[0]
 
+            # if agent in first environment dies, print and log score
             if not masks[0]:
                 print('global steps {} | score: {}'.format(global_steps, score))
                 writer.add_scalar('log/score', score, global_steps)
@@ -107,16 +112,11 @@ def main():
             memory.push(histories.cpu(), next_histories.cpu(), actions, rewards, masks)
             histories = next_histories
 
-        # train network
+        # train network with accumulated samples
         transitions = memory.sample()
         train_model(net, optimizer, transitions, args)
 
-
-        # if global_steps % args.log_interval == 0:
-        #     print('{} episode | score: {:.2f}'.format(e, running_score))
-        #     writer.add_scalar('log/score', float(score), running_score)
-
-        if global_steps % args.save_interval == 0:
+        if count % args.save_interval == 0:
             ckpt_path = args.save_path + 'model.pth'
             torch.save(net.state_dict(), ckpt_path)
 
