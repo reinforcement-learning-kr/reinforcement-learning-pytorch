@@ -72,6 +72,7 @@ def main():
     net.train()
     
     global_steps = 0
+    score = 0
 
     while True:
         memory = Memory(capacity=args.num_step)
@@ -91,6 +92,13 @@ def main():
                 next_histories.append(next_history.unsqueeze(0))
                 rewards.append(reward)
                 masks.append(1-done)
+
+            score += rewards[0]
+
+            if not masks[0]:
+                print('global steps {} | score: {}'.format(global_steps, score))
+                writer.add_scalar('log/score', score, global_steps)
+                score = 0
 
             next_histories = torch.cat(next_histories, dim=0)
             rewards = np.hstack(rewards)

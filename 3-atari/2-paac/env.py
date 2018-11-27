@@ -44,8 +44,8 @@ class EnvWorker(Process):
 			score += reward
 
 			if done:
-				print('{} episode | score: {:.2f} | steps: {}'.format(
-					episode, score, steps))
+				# print('{} episode | score: {:.2f} | steps: {}'.format(
+				# 	episode, score, steps))
 				
 				episode += 1
 				steps = 0
