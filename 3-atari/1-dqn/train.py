@@ -77,8 +77,8 @@ def main():
     target_net.to(device)
     net.train()
     target_net.train()
+
     memory = Memory(100000)
-    running_score = 0
     epsilon = 1.0
     steps = 0
     
