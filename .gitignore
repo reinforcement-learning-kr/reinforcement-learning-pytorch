@@ -104,3 +104,6 @@ logs/
 # mypy
 .mypy_cache/
 *.local
+
+*.txt
+*.pt
