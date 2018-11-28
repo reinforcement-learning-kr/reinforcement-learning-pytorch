@@ -26,14 +26,19 @@ class EnvWorker(Process):
         episode = 0
         steps = 0
         score = 0
+        life = 3
+        dead = False
 
         while True:
             if self.render:
                 self.env.render()
 
             action = self.child_conn.recv()
-            next_state, reward, done, _ = self.env.step(action)
-
+            next_state, reward, done, info = self.env.step(action)
+            if life > info['ale.lives']:
+                dead = True
+                life = info['ale.lives']
+                
             next_state = pre_process(next_state)
             next_state = torch.Tensor(next_state)
             next_state = next_state.unsqueeze(0)
@@ -41,14 +46,25 @@ class EnvWorker(Process):
 
             steps += 1
             score += reward
+            
+            self.child_conn.send([self.history, reward, dead, done])
 
-            if done:
+            if done and dead:
                 # print('{} episode | score: {:.2f} | steps: {}'.format(
                 # 	episode, score, steps))
-                
                 episode += 1
                 steps = 0
                 score = 0
+                dead = False
+                life = 3
                 self.init_state()
 
-            self.child_conn.send([self.history, reward, done])
+                
+            if dead:
+                dead = False
+                self.init_state()
+
+                
+
+
+            

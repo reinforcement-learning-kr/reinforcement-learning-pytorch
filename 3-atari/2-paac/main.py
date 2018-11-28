@@ -89,18 +89,19 @@ def main():
             actions = get_action(policies, num_actions)
 
             # send action to each worker environement and get state information
-            next_histories, rewards, masks = [], [], []
+            next_histories, rewards, masks, dones = [], [], [], []
             for parent_conn, action in zip(parent_conns, actions):
                 parent_conn.send(action)
-                next_history, reward, done = parent_conn.recv()
+                next_history, reward, dead, done = parent_conn.recv()
                 next_histories.append(next_history.unsqueeze(0))
                 rewards.append(reward)
-                masks.append(1-done)
+                masks.append(1-dead)
+                dones.append(done)
 
             score += rewards[0]
 
             # if agent in first environment dies, print and log score
-            if not masks[0]:
+            if dones[0]:
                 print('global steps {} | score: {}'.format(global_steps, score))
                 writer.add_scalar('log/score', score, global_steps)
                 score = 0
@@ -117,7 +118,7 @@ def main():
         train_model(net, optimizer, transitions, args)
 
         if count % args.save_interval == 0:
-            ckpt_path = args.save_path + 'model.pth'
+            ckpt_path = args.save_path + 'model.pt'
             torch.save(net.state_dict(), ckpt_path)
 
 
