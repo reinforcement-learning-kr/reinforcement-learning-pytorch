@@ -81,3 +81,4 @@ global steps 777960 | score: 380.0
 global steps 791840 | score: 850.0
 global steps 799880 | score: 240.0
 global steps 809320 | score: 440.0
+global steps 820120 | score: 490.0
