@@ -23,10 +23,11 @@ def train_model(net, optimizer, transition, args):
     td_errors = (preds - values.squeeze(-1)).detach()
     
     # get policy gradient
-    log_policies = (policies + 1e-5)[:, actions[0]]
+    log_policies = torch.log(policies.gather(1, actions[0].view(-1,1)) + 1e-5)
+
     loss_p = - log_policies * td_errors
     loss_v= F.mse_loss(values.squeeze(-1), preds.detach())
-    entropy = -(policies + 1e-5) * policies
+    entropy = - policies * torch.log(policies + 1e-5)
     loss = loss_p.mean() + args.value_coef * loss_v.mean() - args.entropy_coef * entropy.detach().mean()
     
     optimizer.zero_grad()

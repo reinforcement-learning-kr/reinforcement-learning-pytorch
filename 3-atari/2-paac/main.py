@@ -16,7 +16,7 @@ from env import EnvWorker
 from memory import Memory
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--env_name', type=str, default="MsPacman-v4", help='')
+parser.add_argument('--env_name', type=str, default="Breakout-v4", help='')
 parser.add_argument('--load_model', type=str, default=None)
 parser.add_argument('--save_path', default='./save_model/', help='')
 parser.add_argument('--render', default=False, action="store_true")
@@ -24,7 +24,7 @@ parser.add_argument('--gamma', default=0.99, help='')
 parser.add_argument('--goal_score', default=400, help='')
 parser.add_argument('--log_interval', default=10, help='')
 parser.add_argument('--save_interval', default=1000, help='')
-parser.add_argument('--num_envs', default=8, help='')
+parser.add_argument('--num_envs', default=4, help='')
 parser.add_argument('--num_step', default=5, help='')
 parser.add_argument('--value_coef', default=0.5, help='')
 parser.add_argument('--entropy_coef', default=0.01, help='')

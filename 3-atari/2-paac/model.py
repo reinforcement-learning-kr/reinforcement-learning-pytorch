@@ -1,3 +1,4 @@
+import torch.nn.functional as F
 import torch.nn as nn
 import torch
 
@@ -30,6 +31,6 @@ class ActorCritic(nn.Module):
         x = torch.relu(self.conv3(x))
         x = x.view(x.size(0), -1)
         x = self.fc(x)
-        policy = torch.log_softmax(self.fc_actor(x), dim=-1)
+        policy = F.softmax(self.fc_actor(x), dim=-1)
         value = self.fc_critic(x)
         return policy, value
