@@ -22,7 +22,6 @@ parser.add_argument('--load_model', type=str, default=None)
 parser.add_argument('--save_path', default='./save_model/', help='')
 parser.add_argument('--render', default=False, action="store_true")
 parser.add_argument('--gamma', default=0.99, help='')
-parser.add_argument('--goal_score', default=400, help='')
 parser.add_argument('--log_interval', default=10, help='')
 parser.add_argument('--save_interval', default=1000, help='')
 parser.add_argument('--num_envs', default=16, help='')
@@ -37,7 +36,7 @@ parser.add_argument('--logdir', type=str, default='./logs',
 args = parser.parse_args()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# device = torch.device('cpu')
+
 
 def main():
     env = gym.make(args.env_name)
@@ -101,7 +100,6 @@ def main():
                 dones.append(done)
 
             score += np.array(rewards)
-            # print(score)
 
             # if agent in first environment dies, print and log score
             for i in range(args.num_envs):
@@ -114,10 +112,9 @@ def main():
                     score[i] = 0
             
             next_histories = torch.Tensor(next_histories).to(device)
-            # next_histories = torch.stack(next_histories, dim=0)
             rewards = np.hstack(rewards)
             masks = np.hstack(masks)
-            memory.push(histories, next_histories, policies, values, actions, rewards, masks)
+            memory.push(next_histories, policies, values, actions, rewards, masks)
             histories = next_histories
 
         # train network with accumulated samples

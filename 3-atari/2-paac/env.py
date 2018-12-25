@@ -54,8 +54,6 @@ class EnvWorker(Process):
             self.child_conn.send([deepcopy(self.history), reward, dead, done])
 
             if done and dead:
-                # print('{} episode | score: {:.2f} | steps: {}'.format(
-                # 	episode, score, steps))
                 episode += 1
                 steps = 0
                 score = 0

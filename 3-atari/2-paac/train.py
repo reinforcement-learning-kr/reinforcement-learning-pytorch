@@ -2,10 +2,9 @@ import torch
 import torch.nn.functional as F
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# device = torch.device('cpu')
+
 
 def train_model(net, optimizer, transition, args):
-    histories = torch.stack(transition.history)
     next_histories = torch.stack(transition.next_history)
     policies = torch.stack(transition.policy)
     values = torch.stack(transition.value)
@@ -26,7 +25,6 @@ def train_model(net, optimizer, transition, args):
         returns[t] = running_returns
         
     td_errors = (returns - values.squeeze(-1)).detach()
-    # td_errors = (td_errors - td_errors.mean()) / td_errors.std()
 
     # get policy gradient
     loss_p = - log_policies * td_errors
