@@ -25,7 +25,7 @@ parser.add_argument('--gamma', default=0.99, help='')
 parser.add_argument('--goal_score', default=400, help='')
 parser.add_argument('--log_interval', default=10, help='')
 parser.add_argument('--save_interval', default=1000, help='')
-parser.add_argument('--num_envs', default=12, help='')
+parser.add_argument('--num_envs', default=16, help='')
 parser.add_argument('--num_step', default=20, help='')
 parser.add_argument('--value_coef', default=0.5, help='')
 parser.add_argument('--entropy_coef', default=0.01, help='')
@@ -45,7 +45,7 @@ def main():
     torch.manual_seed(500)
 
     num_inputs = env.observation_space.shape
-    num_actions = env.action_space.n
+    num_actions = env.action_space.n - 1
     print('state size:', num_inputs)
     print('action size:', num_actions)
 

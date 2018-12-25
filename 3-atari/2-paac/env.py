@@ -20,9 +20,7 @@ class EnvWorker(Process):
     def init_state(self):
         state = self.env.reset()
         
-        for _ in range(random.randint(1, 30)):
-            state, _, _, _ = self.env.step(1)
-            
+        state, _, _, _ = self.env.step(1)    
         state = pre_process(state)
         self.history = np.stack((state, state, state, state), axis=0)
 
@@ -40,7 +38,7 @@ class EnvWorker(Process):
                 self.env.render()
 
             action = self.child_conn.recv()
-            next_state, reward, done, info = self.env.step(action)
+            next_state, reward, done, info = self.env.step(action+1)
 
             if life > info['ale.lives']:
                 dead = True
